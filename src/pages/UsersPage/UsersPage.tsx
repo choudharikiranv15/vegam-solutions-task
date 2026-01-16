@@ -11,6 +11,13 @@ import {
   Paper,
   Alert,
   InputAdornment,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { useSnackbar } from 'notistack';
@@ -21,14 +28,70 @@ import type { MRT_PaginationState } from 'material-react-table';
 import type { User, ColumnMetadata } from '@/types';
 
 /**
+ * Loading skeleton for the users table
+ */
+const TableSkeleton: React.FC<{ rowCount?: number }> = ({ rowCount = 10 }) => {
+  const columns = [
+    { header: 'Name', width: 220 },
+    { header: 'Email', width: 260 },
+    { header: 'Status', width: 120 },
+    { header: 'Joined', width: 140 },
+    { header: 'Groups', width: 280 },
+    { header: 'Actions', width: 100 },
+  ];
+
+  return (
+    <TableContainer>
+      <Table>
+        <TableHead>
+          <TableRow>
+            {columns.map((col) => (
+              <TableCell key={col.header} sx={{ width: col.width }}>
+                {col.header}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {Array.from({ length: rowCount }).map((_, rowIndex) => (
+            <TableRow key={rowIndex}>
+              <TableCell>
+                <Skeleton variant="text" width={180} />
+              </TableCell>
+              <TableCell>
+                <Skeleton variant="text" width={200} />
+              </TableCell>
+              <TableCell>
+                <Skeleton variant="rounded" width={60} height={24} />
+              </TableCell>
+              <TableCell>
+                <Skeleton variant="text" width={100} />
+              </TableCell>
+              <TableCell>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Skeleton variant="rounded" width={70} height={24} />
+                  <Skeleton variant="rounded" width={70} height={24} />
+                </Box>
+              </TableCell>
+              <TableCell>
+                <Skeleton variant="circular" width={32} height={32} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
+/**
  * Users Page Component
  *
  * Displays a paginated, filterable list of users.
  *
  * INCOMPLETE FEATURES:
  *
- * 1. No loading skeleton - just shows spinner.
- * 2. No error boundary or proper error UI.
+ * 1. No error boundary or proper error UI.
  */
 export const UsersPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -210,14 +273,18 @@ export const UsersPage: React.FC = () => {
 
       {/* Users Table */}
       <Paper>
-        <DynamicGrid
-          data={usersWithActions}
-          columns={columnsWithActions}
-          isLoading={isLoading}
-          totalCount={data?.data?.totalCount || 0}
-          pagination={pagination}
-          onPaginationChange={handlePaginationChange}
-        />
+        {isLoading ? (
+          <TableSkeleton rowCount={pagination.pageSize} />
+        ) : (
+          <DynamicGrid
+            data={usersWithActions}
+            columns={columnsWithActions}
+            isLoading={false}
+            totalCount={data?.data?.totalCount || 0}
+            pagination={pagination}
+            onPaginationChange={handlePaginationChange}
+          />
+        )}
       </Paper>
     </Box>
   );
