@@ -9,7 +9,6 @@ import {
   Select,
   MenuItem,
   Paper,
-  Alert,
   InputAdornment,
   Skeleton,
   Table,
@@ -18,10 +17,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Button,
 } from '@mui/material';
+import SearchOffIcon from '@mui/icons-material/SearchOff';
 import SearchIcon from '@mui/icons-material/Search';
 import { useSnackbar } from 'notistack';
-import { DynamicGrid, UserActions } from '@/components';
+import { DynamicGrid, UserActions, ErrorDisplay } from '@/components';
 import { useUsers, useUpdateUserStatus, useDebounce } from '@/hooks';
 import { userColumnMetadata } from '@/utils';
 import type { MRT_PaginationState } from 'material-react-table';
@@ -85,13 +86,53 @@ const TableSkeleton: React.FC<{ rowCount?: number }> = ({ rowCount = 10 }) => {
 };
 
 /**
+ * Empty state when no users match the search/filter criteria
+ */
+const EmptyState: React.FC<{
+  searchQuery: string;
+  statusFilter: string;
+  onClearFilters: () => void;
+}> = ({ searchQuery, statusFilter, onClearFilters }) => {
+  const hasFilters = searchQuery || statusFilter !== 'all';
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        py: 8,
+        px: 2,
+      }}
+    >
+      <SearchOffIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+      <Typography variant="h6" color="text.secondary" gutterBottom>
+        No users found
+      </Typography>
+      <Typography variant="body2" color="text.disabled" sx={{ mb: 3, textAlign: 'center' }}>
+        {hasFilters
+          ? `No users match your search${searchQuery ? ` "${searchQuery}"` : ''}${statusFilter !== 'all' ? ` with status "${statusFilter}"` : ''}`
+          : 'There are no users to display'}
+      </Typography>
+      {hasFilters && (
+        <Button variant="outlined" size="small" onClick={onClearFilters}>
+          Clear Filters
+        </Button>
+      )}
+    </Box>
+  );
+};
+
+/**
  * Users Page Component
  *
- * Displays a paginated, filterable list of users.
- *
- * INCOMPLETE FEATURES:
- *
- * 1. No error boundary or proper error UI.
+ * Displays a paginated, filterable list of users with:
+ * - Search with debouncing
+ * - Status filtering
+ * - Pagination synced with URL
+ * - Loading skeletons
+ * - Error handling with retry
  */
 export const UsersPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -114,7 +155,7 @@ export const UsersPage: React.FC = () => {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Fetch users with debounced search
-  const { data, isLoading, error } = useUsers({
+  const { data, isLoading, error, refetch } = useUsers({
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
     query: debouncedSearchQuery,
@@ -188,6 +229,14 @@ export const UsersPage: React.FC = () => {
     });
   };
 
+  // Handle clear filters
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    setSearchParams({});
+  };
+
   // Add actions column to metadata
   const columnsWithActions: ColumnMetadata[] = [
     ...userColumnMetadata,
@@ -211,12 +260,21 @@ export const UsersPage: React.FC = () => {
     ),
   }));
 
-  // Error state - TODO: Improve error UI
+  // Error state with retry functionality
   if (error) {
     return (
-      <Alert severity="error" sx={{ mt: 2 }}>
-        Failed to load users: {error.message}
-      </Alert>
+      <Box>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Users
+        </Typography>
+        <Paper sx={{ p: 2 }}>
+          <ErrorDisplay
+            error={error}
+            title="Failed to load users"
+            onRetry={() => refetch()}
+          />
+        </Paper>
+      </Box>
     );
   }
 
@@ -275,6 +333,12 @@ export const UsersPage: React.FC = () => {
       <Paper>
         {isLoading ? (
           <TableSkeleton rowCount={pagination.pageSize} />
+        ) : usersWithActions.length === 0 ? (
+          <EmptyState
+            searchQuery={debouncedSearchQuery}
+            statusFilter={statusFilter}
+            onClearFilters={handleClearFilters}
+          />
         ) : (
           <DynamicGrid
             data={usersWithActions}

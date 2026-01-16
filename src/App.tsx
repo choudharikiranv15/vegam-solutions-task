@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { SnackbarProvider } from 'notistack';
 import { router } from './routes';
+import { ErrorBoundary } from '@/components';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -11,6 +12,9 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
       refetchOnWindowFocus: false,
+      refetchOnReconnect: true, // Auto-retry when network comes back
+      retry: 2, // Retry failed requests 2 times
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
   },
 });
@@ -48,7 +52,9 @@ function App() {
           maxSnack={3}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         >
-          <RouterProvider router={router} />
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+          </ErrorBoundary>
         </SnackbarProvider>
       </ThemeProvider>
     </QueryClientProvider>
