@@ -15,7 +15,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import { useSnackbar } from 'notistack';
 import { DynamicGrid, UserActions } from '@/components';
-import { useUsers, useUpdateUserStatus } from '@/hooks';
+import { useUsers, useUpdateUserStatus, useDebounce } from '@/hooks';
 import { userColumnMetadata } from '@/utils';
 import type { MRT_PaginationState } from 'material-react-table';
 import type { User, ColumnMetadata } from '@/types';
@@ -27,9 +27,8 @@ import type { User, ColumnMetadata } from '@/types';
  *
  * INCOMPLETE FEATURES:
  *
- * 1. Search is not debounced - API is called on every keystroke.
- * 2. No loading skeleton - just shows spinner.
- * 3. No error boundary or proper error UI.
+ * 1. No loading skeleton - just shows spinner.
+ * 2. No error boundary or proper error UI.
  */
 export const UsersPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,12 +47,14 @@ export const UsersPage: React.FC = () => {
     pageSize: 10,
   });
 
-  // Fetch users - BUG: Search is not debounced!
-  // TODO: Use the useDebounce hook to debounce the search query
+  // Debounce search query to prevent API calls on every keystroke
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Fetch users with debounced search
   const { data, isLoading, error } = useUsers({
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
-    query: searchQuery, // BUG: This updates on every keystroke
+    query: debouncedSearchQuery,
     status: statusFilter,
   });
 
@@ -75,7 +76,7 @@ export const UsersPage: React.FC = () => {
     );
   };
 
-  // Handle search input change - TODO: Add debouncing
+  // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -166,7 +167,7 @@ export const UsersPage: React.FC = () => {
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          {/* Search Input - BUG: Not debounced! */}
+          {/* Search Input */}
           <TextField
             placeholder="Search by name or email..."
             value={searchQuery}
