@@ -32,10 +32,7 @@ export const useUpdateUserStatus = () => {
     mutationFn: ({ userId, status }: { userId: string; status: 'active' | 'inactive' }) =>
       updateUserStatus(userId, status),
     onSuccess: () => {
-      // BUG: Cache invalidation is missing!
-      // The table doesn't refresh after status update.
-      // Hint: Look at how React Query cache invalidation works.
-      console.log('User status updated successfully');
+      queryClient.invalidateQueries({ queryKey: userQueryKeys.all });
     },
   });
 };
