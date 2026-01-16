@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchUsers, updateUserStatus } from '@/api';
-import type { PaginationParams } from '@/types';
+import type { PaginationParams, UsersApiResponse } from '@/types';
 
 // Query keys
 export const userQueryKeys = {
@@ -19,11 +19,10 @@ export const useUsers = (params: PaginationParams) => {
 };
 
 /**
- * Hook to update user status
+ * Hook to update user status with optimistic updates
  *
- * BUG: After updating user status, the table doesn't refresh.
- * The user needs to manually refresh to see the updated status.
- * TODO: Fix the cache invalidation issue.
+ * Immediately updates the UI when status is toggled, then syncs with server.
+ * If the API call fails, reverts to the original status.
  */
 export const useUpdateUserStatus = () => {
   const queryClient = useQueryClient();
@@ -31,7 +30,48 @@ export const useUpdateUserStatus = () => {
   return useMutation({
     mutationFn: ({ userId, status }: { userId: string; status: 'active' | 'inactive' }) =>
       updateUserStatus(userId, status),
-    onSuccess: () => {
+
+    onMutate: async ({ userId, status }) => {
+      // Cancel any outgoing refetches to prevent overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: userQueryKeys.all });
+
+      // Snapshot all current user queries for potential rollback
+      const previousQueries = queryClient.getQueriesData<UsersApiResponse>({
+        queryKey: userQueryKeys.all,
+      });
+
+      // Optimistically update all user queries in the cache
+      queryClient.setQueriesData<UsersApiResponse>(
+        { queryKey: userQueryKeys.all },
+        (oldData) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            data: {
+              ...oldData.data,
+              users: oldData.data.users.map((user) =>
+                user.userId === userId ? { ...user, status } : user
+              ),
+            },
+          };
+        }
+      );
+
+      // Return snapshot for rollback on error
+      return { previousQueries };
+    },
+
+    onError: (_error, _variables, context) => {
+      // Rollback to previous state on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+    },
+
+    onSettled: () => {
+      // Refetch to ensure cache is in sync with server
       queryClient.invalidateQueries({ queryKey: userQueryKeys.all });
     },
   });
