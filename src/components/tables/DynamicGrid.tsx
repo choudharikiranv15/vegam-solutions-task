@@ -1,13 +1,44 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   MaterialReactTable,
   useMaterialReactTable,
   type MRT_ColumnDef,
   type MRT_PaginationState,
+  type MRT_VisibilityState,
+  type MRT_SortingState,
 } from 'material-react-table';
 import { Chip, Box } from '@mui/material';
 import type { ColumnMetadata, User, Group } from '@/types';
 import { formatDate } from '@/utils';
+
+// localStorage keys for persisting table state
+const STORAGE_KEYS = {
+  COLUMN_VISIBILITY: 'users-table-column-visibility',
+  SORTING: 'users-table-sorting',
+};
+
+/**
+ * Load state from localStorage
+ */
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+/**
+ * Save state to localStorage
+ */
+const saveToStorage = <T,>(key: string, value: T): void => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage errors
+  }
+};
 
 interface DynamicGridProps {
   data: User[];
@@ -79,6 +110,7 @@ const renderCellByType = (
  * - Custom cell renderers for different data types
  * - Server-side pagination
  * - Sorting support
+ * - Persisted column visibility and sort order (localStorage)
  */
 export const DynamicGrid: React.FC<DynamicGridProps> = ({
   data,
@@ -88,6 +120,38 @@ export const DynamicGrid: React.FC<DynamicGridProps> = ({
   pagination,
   onPaginationChange,
 }) => {
+  // Load persisted state from localStorage
+  const [columnVisibility, setColumnVisibility] = useState<MRT_VisibilityState>(
+    () => loadFromStorage(STORAGE_KEYS.COLUMN_VISIBILITY, {})
+  );
+  const [sorting, setSorting] = useState<MRT_SortingState>(
+    () => loadFromStorage(STORAGE_KEYS.SORTING, [])
+  );
+
+  // Persist column visibility changes
+  const handleColumnVisibilityChange = useCallback(
+    (updater: MRT_VisibilityState | ((old: MRT_VisibilityState) => MRT_VisibilityState)) => {
+      setColumnVisibility((prev) => {
+        const newValue = typeof updater === 'function' ? updater(prev) : updater;
+        saveToStorage(STORAGE_KEYS.COLUMN_VISIBILITY, newValue);
+        return newValue;
+      });
+    },
+    []
+  );
+
+  // Persist sorting changes
+  const handleSortingChange = useCallback(
+    (updater: MRT_SortingState | ((old: MRT_SortingState) => MRT_SortingState)) => {
+      setSorting((prev) => {
+        const newValue = typeof updater === 'function' ? updater(prev) : updater;
+        saveToStorage(STORAGE_KEYS.SORTING, newValue);
+        return newValue;
+      });
+    },
+    []
+  );
+
   // Generate MRT columns from metadata
   const tableColumns = useMemo<MRT_ColumnDef<User>[]>(() => {
     return columns.map((colMeta) => ({
@@ -96,6 +160,7 @@ export const DynamicGrid: React.FC<DynamicGridProps> = ({
       size: colMeta.width,
       enableSorting: colMeta.sorting ?? false,
       enablePinning: !!colMeta.pinned,
+      enableHiding: true,
       Cell: ({ cell }) => {
         const value = cell.getValue();
         return renderCellByType(value, colMeta);
@@ -109,12 +174,18 @@ export const DynamicGrid: React.FC<DynamicGridProps> = ({
     enableRowSelection: false,
     enableColumnFilters: false,
     enableGlobalFilter: false,
+    enableHiding: true,
     manualPagination: true,
+    manualSorting: false,
     rowCount: totalCount,
     state: {
       isLoading,
       pagination,
+      columnVisibility,
+      sorting,
     },
+    onColumnVisibilityChange: handleColumnVisibilityChange,
+    onSortingChange: handleSortingChange,
     onPaginationChange: (updater) => {
       const newPagination =
         typeof updater === 'function' ? updater(pagination) : updater;
@@ -123,7 +194,7 @@ export const DynamicGrid: React.FC<DynamicGridProps> = ({
     muiTableContainerProps: {
       sx: { maxHeight: '600px' },
     },
-    muiTableBodyRowProps: ({ row }) => ({
+    muiTableBodyRowProps: () => ({
       sx: {
         cursor: 'pointer',
         '&:hover': {
