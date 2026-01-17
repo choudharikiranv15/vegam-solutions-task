@@ -126,7 +126,7 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
           </Typography>
 
           {/* Technical details (collapsible in production) */}
-          {process.env.NODE_ENV === 'development' && (
+          {import.meta.env.DEV && (
             <Typography
               variant="caption"
               sx={{
