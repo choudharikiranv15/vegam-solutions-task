@@ -137,4 +137,10 @@ The application follows a standard **Single Page Application (SPA)** architectur
 - `components/tables`: Specialized complex components for data display.
 - `hooks`: Encapsulates business logic and side effects, keeping components clean.
 - `utils`: Pure functions and configuration (e.g., `columnConfig`) separate from UI logic.
-- `mocks`: Self-contained mock backend definition.
+
+### 📸 Screenshots
+
+| Dashboard (Users Page) | User Actions |
+|:---:|:---:|
+| ![Dashboard](screenshots/dashboard.png) | ![Actions](screenshots/actions.png) |
+| *Main User Grid with Search & Filters* | *Active/Inactive Status Toggle with Confirmation* |
