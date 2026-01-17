@@ -23,7 +23,7 @@ import SearchOffIcon from '@mui/icons-material/SearchOff';
 import SearchIcon from '@mui/icons-material/Search';
 import { useSnackbar } from 'notistack';
 import { DynamicGrid, UserActions, ErrorDisplay } from '@/components';
-import { useUsers, useUpdateUserStatus, useDebounce } from '@/hooks';
+import { useUsers, useUpdateUserStatus, useDebounce, useOnlineStatus } from '@/hooks';
 import { userColumnMetadata } from '@/utils';
 import type { MRT_PaginationState } from 'material-react-table';
 import type { User, ColumnMetadata } from '@/types';
@@ -137,6 +137,7 @@ const EmptyState: React.FC<{
 export const UsersPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { enqueueSnackbar } = useSnackbar();
+  const isOnline = useOnlineStatus();
 
   // Initialize state from URL params
   const initialPage = parseInt(searchParams.get('page') || '1') - 1;
@@ -165,8 +166,16 @@ export const UsersPage: React.FC = () => {
   // Update user status mutation
   const { mutate: updateStatus, isPending: isUpdating } = useUpdateUserStatus();
 
-  // Handle status toggle
+  // Handle status toggle with network check
   const handleToggleStatus = (userId: string, newStatus: 'active' | 'inactive') => {
+    // Check if user is online before attempting action
+    if (!isOnline) {
+      enqueueSnackbar('No internet connection. Please check your network and try again.', {
+        variant: 'error',
+      });
+      return;
+    }
+
     updateStatus(
       { userId, status: newStatus },
       {
