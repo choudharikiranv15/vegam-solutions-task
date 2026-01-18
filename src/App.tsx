@@ -2,9 +2,10 @@ import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Box } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
 import { router } from './routes';
-import { ErrorBoundary } from '@/components';
+import { ErrorBoundary, OfflineBanner } from '@/components';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -53,7 +54,13 @@ function App() {
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         >
           <ErrorBoundary>
-            <RouterProvider router={router} />
+            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+              {/* Offline banner appears at the top when connection is lost */}
+              <OfflineBanner />
+              <Box sx={{ flex: 1 }}>
+                <RouterProvider router={router} />
+              </Box>
+            </Box>
           </ErrorBoundary>
         </SnackbarProvider>
       </ThemeProvider>

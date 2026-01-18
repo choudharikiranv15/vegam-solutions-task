@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -18,10 +18,13 @@ import {
   TableHead,
   TableRow,
   Button,
+  Alert,
+  Collapse,
 } from '@mui/material';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import SearchIcon from '@mui/icons-material/Search';
-import { useSnackbar } from 'notistack';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { useSnackbar, SnackbarKey } from 'notistack';
 import { DynamicGrid, UserActions, ErrorDisplay } from '@/components';
 import { useUsers, useUpdateUserStatus, useDebounce, useOnlineStatus } from '@/hooks';
 import { userColumnMetadata } from '@/utils';
@@ -136,8 +139,15 @@ const EmptyState: React.FC<{
  */
 export const UsersPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { enqueueSnackbar } = useSnackbar();
+  const navigate = useNavigate();
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
   const isOnline = useOnlineStatus();
+
+  // Track failed action for retry
+  const [lastFailedAction, setLastFailedAction] = useState<{
+    userId: string;
+    status: 'active' | 'inactive';
+  } | null>(null);
 
   // Initialize state from URL params
   const initialPage = parseInt(searchParams.get('page') || '1') - 1;
@@ -156,7 +166,7 @@ export const UsersPage: React.FC = () => {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Fetch users with debounced search
-  const { data, isLoading, error, refetch } = useUsers({
+  const { data, isLoading, error, refetch, isRefetching } = useUsers({
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
     query: debouncedSearchQuery,
@@ -166,12 +176,28 @@ export const UsersPage: React.FC = () => {
   // Update user status mutation
   const { mutate: updateStatus, isPending: isUpdating } = useUpdateUserStatus();
 
-  // Handle status toggle with network check
+  // Handle status toggle with network check and retry capability
   const handleToggleStatus = (userId: string, newStatus: 'active' | 'inactive') => {
     // Check if user is online before attempting action
     if (!isOnline) {
+      setLastFailedAction({ userId, status: newStatus });
       enqueueSnackbar('No internet connection. Please check your network and try again.', {
         variant: 'error',
+        persist: true,
+        action: (snackbarId: SnackbarKey) => (
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              closeSnackbar(snackbarId);
+              if (navigator.onLine) {
+                handleToggleStatus(userId, newStatus);
+              }
+            }}
+          >
+            Retry
+          </Button>
+        ),
       });
       return;
     }
@@ -180,13 +206,40 @@ export const UsersPage: React.FC = () => {
       { userId, status: newStatus },
       {
         onSuccess: (response) => {
+          setLastFailedAction(null);
           enqueueSnackbar(response.message, { variant: 'success' });
         },
-        onError: () => {
-          enqueueSnackbar('Failed to update user status', { variant: 'error' });
+        onError: (err) => {
+          setLastFailedAction({ userId, status: newStatus });
+          const errorMessage = err instanceof Error ? err.message : 'Failed to update user status';
+
+          enqueueSnackbar(errorMessage, {
+            variant: 'error',
+            action: (snackbarId: SnackbarKey) => (
+              <Button
+                color="inherit"
+                size="small"
+                startIcon={<RefreshIcon />}
+                onClick={() => {
+                  closeSnackbar(snackbarId);
+                  handleToggleStatus(userId, newStatus);
+                }}
+              >
+                Retry
+              </Button>
+            ),
+          });
         },
       }
     );
+  };
+
+  // Retry the last failed action
+  const retryLastAction = () => {
+    if (lastFailedAction) {
+      handleToggleStatus(lastFailedAction.userId, lastFailedAction.status);
+      setLastFailedAction(null);
+    }
   };
 
   // Handle search input change
@@ -281,6 +334,7 @@ export const UsersPage: React.FC = () => {
             error={error}
             title="Failed to load users"
             onRetry={() => refetch()}
+            onGoHome={() => navigate('/')}
           />
         </Paper>
       </Box>
@@ -293,6 +347,46 @@ export const UsersPage: React.FC = () => {
       <Typography variant="h4" component="h1" gutterBottom>
         Users
       </Typography>
+
+      {/* Offline Warning */}
+      <Collapse in={!isOnline}>
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => refetch()}
+              disabled={!navigator.onLine}
+            >
+              Retry
+            </Button>
+          }
+        >
+          You are currently offline. Some actions may not be available until your connection is restored.
+        </Alert>
+      </Collapse>
+
+      {/* Retry banner for failed actions */}
+      <Collapse in={!!lastFailedAction && isOnline}>
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<RefreshIcon />}
+              onClick={retryLastAction}
+            >
+              Retry Last Action
+            </Button>
+          }
+        >
+          Your last action failed. Click retry to try again.
+        </Alert>
+      </Collapse>
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>
@@ -330,10 +424,23 @@ export const UsersPage: React.FC = () => {
           </FormControl>
 
           {/* Results Count */}
-          <Box sx={{ display: 'flex', alignItems: 'center', ml: 'auto' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: 'auto' }}>
+            {isRefetching && (
+              <Typography variant="body2" color="primary">
+                Refreshing...
+              </Typography>
+            )}
             <Typography variant="body2" color="text.secondary">
               {data?.data?.totalCount || 0} users found
             </Typography>
+            <Button
+              size="small"
+              startIcon={<RefreshIcon />}
+              onClick={() => refetch()}
+              disabled={isRefetching || !isOnline}
+            >
+              Refresh
+            </Button>
           </Box>
         </Box>
       </Paper>
